@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
+    <data-source source="LOCAL" name="chat_history" uuid="6f3ae918-57a2-4ff7-b5e7-bc729c9e3c37">
+      <driver-ref>sqlite.xerial</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
+      <jdbc-url>jdbc:sqlite:D:\PC-Backup-2023\KONA PROJECTS\AI\kip-portal-chat-bot\server-python\db\chat_history.db</jdbc-url>
+    </data-source>
+  </component>
+</project>

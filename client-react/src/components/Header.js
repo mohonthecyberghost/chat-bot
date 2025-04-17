@@ -3,7 +3,7 @@ import React from 'react';
 const Header = ({ toggled, setToggled }) => {
   return (
     <div className="chat-header">
-      <h1>Example chat app</h1>
+      <h1>KIP Portal AI ChatBOT</h1>
       <span className='toggle-text'>Stream Response</span>
       <button 
         className={`toggle-btn ${toggled ? "toggled": ""}`}

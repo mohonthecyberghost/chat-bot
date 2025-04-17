@@ -76,7 +76,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  width: 45vw;
+  width: 100%;
 }
 
 .chat-area {
@@ -115,7 +115,7 @@ body {
   flex-grow: 4;
   padding: 5px 5px 5px 45px;
   height: 50px;
-  font-size: 1.15vw;
+  font-size: 120%;
   border: 0px;
   background-color: transparent;
   color: rgb(31, 2, 2);
