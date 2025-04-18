@@ -2,7 +2,7 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import userIcon from '../assets/user-icon.png';
 // TODO: Consider replacing chatbotIcon with its own distinct icon.
-import chatbotIcon from '../assets/user-icon.png'
+import chatbotIcon from '../assets/chatbot-icon.png'
 
 const ChatArea = ({ data, streamdiv, answer }) => {
   return (
