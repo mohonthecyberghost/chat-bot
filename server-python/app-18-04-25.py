@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flask import Flask, request, Response, stream_with_context, jsonify, session
+from flask import Flask, request, Response, stream_with_context, jsonify
 from flask_cors import CORS
-from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
@@ -23,35 +21,44 @@ import json
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Session, ChatMessage, User
+from models import Session, ChatMessage
 
-# Load environment variables from a .env file
+
+# Load environment variables from a .env file located in the same directory.
 load_dotenv()
 
-# Initialize Flask app
+# Initialize a Flask application.
 app = Flask(__name__)
+
+# Apply CORS to the Flask app.
 CORS(app)
 
-# Setup JWT
-app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "super-secret")
-jwt = JWTManager(app)
-
-# Setup Bcrypt
-bcrypt = Bcrypt(app)
-
-# Configure Gemini
+# Configure the Google Generative AI's Google API key.
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# Initialize the generative model.
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
-# Load docs
-project_docs = ""
-def load_docs():
-    global project_docs
-    with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
-        project_docs = f.read()
-load_docs()
 
-# Chat history helpers
+
+# Load project documentation
+def load_docs():
+    with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
+        return f.read()
+
+project_docs = load_docs()
+
+# Restore chat history from file (if exists)
+def load_chat_history_json():
+    if os.path.exists("docs/chat_history.json"):
+        with open("docs/chat_history.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+# Save chat history
+def save_chat_history_json(history):
+    with open("docs/chat_history.json", "w", encoding="utf-8") as f:
+        json.dump(history, f)
 
 def load_chat_history():
     session = Session()
@@ -61,13 +68,21 @@ def load_chat_history():
 
 def save_chat_history(history):
     session = Session()
-    session.query(ChatMessage).delete()
+    session.query(ChatMessage).delete()  # Clear old history if you want full overwrite
     for item in history:
         msg = ChatMessage(role=item["role"], content=item["parts"][0])
         session.add(msg)
     session.commit()
     session.close()
 
+# Serialize Gemini messages for JSON
+def serialize_message(msg):
+    return {
+        "role": msg.role,
+        "parts": [str(part) for part in msg.parts]
+    }
+
+# Convert history to readable string for prompt context
 def format_history(history):
     text = ""
     for msg in history:
@@ -78,50 +93,7 @@ def format_history(history):
             text += f"{role}: {content}\n"
     return text
 
-# Auth endpoints
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-
-    if not username or not password:
-        return jsonify({"error": "Missing username or password"}), 400
-
-    session_db = Session()
-    existing_user = session_db.query(User).filter_by(username=username).first()
-
-    if existing_user:
-        session_db.close()
-        return jsonify({"error": "User already exists"}), 400
-
-    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
-    new_user = User(username=username, password=hashed_pw)
-    session_db.add(new_user)
-    session_db.commit()
-    session_db.close()
-
-    return jsonify({"message": "User registered successfully"})
-
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-
-    session_db = Session()
-    user = session_db.query(User).filter_by(username=username).first()
-    session_db.close()
-
-    if user and bcrypt.check_password_hash(user.password, password):
-        token = create_access_token(identity=username)
-        return jsonify({"token": token})
-    else:
-        return jsonify({"error": "Invalid credentials"}), 401
-
-# Chat endpoint
 @app.route("/chat", methods=["POST"])
-@jwt_required()
 def chat():
     data = request.json
     user_input = data.get("user_input")
@@ -132,15 +104,7 @@ def chat():
     history = load_chat_history()
     formatted_history = format_history(history)
 
-    # Step 1: Get the username from the JWT
-    current_user = get_jwt_identity()
-
-    # Step 2: Get user role from DB
-    session_db = Session()
-    user = session_db.query(User).filter_by(username=current_user).first()
-    user_role = user.role if user else "user"
-    session_db.close()
-
+    # Create combined context
     combined_context = f"""
 Project Documentation:
 {project_docs}
@@ -152,13 +116,13 @@ User Query:
 {user_input}
 """
 
+    # Send combined context as a single message
     response = model.generate_content(combined_context)
 
-    if user_role=="manager":
-        history.append({"role": user_role, "parts": [user_input]})
-        history.append({"role": "model", "parts": [response.text]})
-        save_chat_history(history)
-
+    # Append current interaction to history
+    history.append({"role": "user", "parts": [user_input]})
+    history.append({"role": "model", "parts": [response.text]})
+    save_chat_history(history)
 
     return jsonify({
         "reply": response.text,
@@ -166,12 +130,10 @@ User Query:
     })
 
 @app.route("/history", methods=["GET"])
-@jwt_required()
 def get_history():
     return jsonify(load_chat_history())
 
 @app.route("/stream", methods=["POST"])
-@jwt_required()
 def stream():
     def generate():
         data = request.json
@@ -179,16 +141,6 @@ def stream():
 
         history = load_chat_history()
         formatted_history = format_history(history)
-
-
-        # Step 1: Get the username from the JWT
-        current_user = get_jwt_identity()
-
-        # Step 2: Get user role from DB
-        session_db = Session()
-        user = session_db.query(User).filter_by(username=current_user).first()
-        user_role = user.role if user else "user"
-        session_db.close()
 
         combined_context = f"""
 Project Documentation:
@@ -208,10 +160,10 @@ User Query:
             collected_response += chunk.text
             yield chunk.text
 
-        if user_role=="manager":
-            history.append({"role": user_role, "parts": [msg]})
-            history.append({"role": "model", "parts": [collected_response]})
-            save_chat_history(history)
+        # Append to history after full stream
+        history.append({"role": "user", "parts": [msg]})
+        history.append({"role": "model", "parts": [collected_response]})
+        save_chat_history(history)
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 

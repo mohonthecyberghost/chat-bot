@@ -289,3 +289,24 @@ body {
   position: relative;
   left: 15px;
 }
+
+.auth-form {
+  width: 300px;
+  margin: 100px auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+}
+.auth-form h2 {
+  text-align: center;
+}
+.auth-form input {
+  display: block;
+  width: 92%;
+  padding: 10px;
+  margin: 10px 0;
+}
+.auth-form button {
+  width: 100%;
+  padding: 10px;
+}
