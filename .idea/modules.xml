@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/kip-portal-chat-bot.iml" filepath="$PROJECT_DIR$/.idea/kip-portal-chat-bot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/kip-chat-bot.iml" filepath="$PROJECT_DIR$/.idea/kip-chat-bot.iml" />
     </modules>
   </component>
 </project>
