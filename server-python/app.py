@@ -1,10 +1,13 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, Response, stream_with_context, jsonify, session
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from mongoengine import connect
-# from models import User, ChatMessage  # Ensure correct imports from models.py
+from flask_cors import CORS
+from models.models import User, ChatMessage
 import os
 from dotenv import load_dotenv
+import google.generativeai as genai
+
 
 # Load environment variables
 load_dotenv()
@@ -16,11 +19,27 @@ connect(os.getenv("MONGO_DB_NAME"), host=os.getenv("MONGO_URI"))
 app = Flask(__name__)
 
 # Setup JWT
-app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "super-secret")
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
 
 # Setup Bcrypt
 bcrypt = Bcrypt(app)
+
+# Enable CORS for the entire app
+CORS(app)
+
+# Configure Gemini
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+
+
+# Load docs
+project_docs = ""
+def load_docs():
+    global project_docs
+    with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
+        project_docs = f.read()
+load_docs()
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -95,6 +114,46 @@ User Query:
         "reply": response.text,
         "new_messages": history
     })
+
+@app.route("/stream", methods=["POST"])
+@jwt_required()
+def stream():
+    def generate():
+        data = request.json
+        msg = data.get('chat', '')
+
+        history = load_chat_history()
+        formatted_history = format_history(history)
+
+        # Get current user from JWT
+        current_user = get_jwt_identity()
+        user = User.objects(username=current_user).first()
+        user_role = user.role if user else "user"
+
+        combined_context = f"""
+Project Documentation:
+{project_docs}
+
+Conversation History:
+{formatted_history}
+
+User Query:
+{msg}
+"""
+
+        response = model.generate_content(combined_context, stream=True)
+
+        collected_response = ""
+        for chunk in response:
+            collected_response += chunk.text
+            yield chunk.text
+
+        if user_role == "manager":
+            history.append({"role": user_role, "parts": [msg]})
+            history.append({"role": "model", "parts": [collected_response]})
+            save_chat_history(history)
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
 def load_chat_history():
     history = []
