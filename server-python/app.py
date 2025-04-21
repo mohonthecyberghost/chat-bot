@@ -155,7 +155,7 @@ User Query:
     response = model.generate_content(combined_context)
 
     if user_role=="manager":
-        history.append({"role": "user", "parts": [user_input]})
+        history.append({"role": user_role, "parts": [user_input]})
         history.append({"role": "model", "parts": [response.text]})
         save_chat_history(history)
 
@@ -209,7 +209,7 @@ User Query:
             yield chunk.text
 
         if user_role=="manager":
-            history.append({"role": "user", "parts": [msg]})
+            history.append({"role": user_role, "parts": [msg]})
             history.append({"role": "model", "parts": [collected_response]})
             save_chat_history(history)
 
