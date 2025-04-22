@@ -1,182 +1,184 @@
-from flask import Flask, request, Response, stream_with_context, jsonify, session
+from flask import (
+    Flask, request, jsonify, Response, stream_with_context
+)
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from mongoengine import connect
+from flask_jwt_extended import (
+    JWTManager, create_access_token,
+    jwt_required, get_jwt_identity
+)
 from flask_cors import CORS
+from mongoengine import connect
 from models.models import User, ChatMessage
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
+from PIL import Image
+import io
 
-
-# Load environment variables
+# ——— Configuration —————————————————————————————————————————————————————————
 load_dotenv()
 
-# Connect to MongoDB using mongoengine
-connect(os.getenv("MONGO_DB_NAME"), host=os.getenv("MONGO_URI"))
+# MongoDB
+connect(
+    db=os.getenv("MONGO_DB_NAME"),
+    host=os.getenv("MONGO_URI")
+)
 
-# Initialize Flask app
+# Flask app
 app = Flask(__name__)
-
-# Setup JWT
-app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
-jwt = JWTManager(app)
-
-# Setup Bcrypt
-bcrypt = Bcrypt(app)
-
-# Enable CORS for the entire app
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "super-secret")
 CORS(app)
 
-# Configure Gemini
+# Extensions
+jwt = JWTManager(app)
+bcrypt = Bcrypt(app)
+
+# Gemini
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
-
-# Load docs
+# Load your project docs once
 project_docs = ""
-def load_docs():
-    global project_docs
-    with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
-        project_docs = f.read()
-load_docs()
+with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
+    project_docs = f.read()
+
+
+# ——— Helpers ———————————————————————————————————————————————————————————————
+
+def load_chat_history():
+    return [
+        {"role": m.role, "parts": [m.content]}
+        for m in ChatMessage.objects.order_by("timestamp")
+    ]
+
+def save_chat_history(history):
+    ChatMessage.objects.delete()
+    for item in history:
+        ChatMessage(role=item["role"], content=item["parts"][0]).save()
+
+def format_history(history):
+    out = ""
+    for msg in history:
+        r = msg.get("role", "").capitalize()
+        for part in msg.get("parts", []):
+            txt = part if isinstance(part, str) else part.get("text", "")
+            out += f"{r}: {txt}\n"
+    return out
+
+def image_from_file_storage(fs):
+    """Load a PIL.Image from Flask FileStorage."""
+    img_bytes = fs.read()
+    return Image.open(io.BytesIO(img_bytes))
+
+
+# ——— Routes ———————————————————————————————————————————————————————————————
 
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
+    u, p = data.get("username"), data.get("password")
+    if not u or not p:
+        return jsonify(error="Missing username or password"), 400
 
-    if not username or not password:
-        return jsonify({"error": "Missing username or password"}), 400
+    if User.objects(username=u).first():
+        return jsonify(error="User already exists"), 400
 
-    existing_user = User.objects(username=username).first()
-
-    if existing_user:
-        return jsonify({"error": "User already exists"}), 400
-
-    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
-    new_user = User(username=username, password=hashed_pw)
-    new_user.save()
-
-    return jsonify({"message": "User registered successfully"})
+    hp = bcrypt.generate_password_hash(p).decode("utf-8")
+    User(username=u, password=hp).save()
+    return jsonify(message="User registered successfully")
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-
-    user = User.objects(username=username).first()
-
-    if user and bcrypt.check_password_hash(user.password, password):
-        token = create_access_token(identity=username)
-        return jsonify({"token": token})
-    else:
-        return jsonify({"error": "Invalid credentials"}), 401
+    u, p = data.get("username"), data.get("password")
+    user = User.objects(username=u).first()
+    if user and bcrypt.check_password_hash(user.password, p):
+        tok = create_access_token(identity=u)
+        return jsonify(token=tok)
+    return jsonify(error="Invalid credentials"), 401
 
 @app.route("/chat", methods=["POST"])
 @jwt_required()
 def chat():
-    data = request.json
-    user_input = data.get("user_input")
+    # get text + optional image
+    text = request.form.get("user_input", "")
+    image_fs = request.files.get("image")
 
-    if not user_input:
-        return jsonify({"error": "Missing user_input"}), 400
-
+    # load history & user role
     history = load_chat_history()
-    formatted_history = format_history(history)
+    formatted = format_history(history)
+    me = get_jwt_identity()
+    u = User.objects(username=me).first()
+    role = u.role if u else "user"
 
-    current_user = get_jwt_identity()
-
-    user = User.objects(username=current_user).first()
-    user_role = user.role if user else "user"
-
-    combined_context = f"""
+    # build context
+    ctx = f"""
 Project Documentation:
 {project_docs}
 
 Conversation History:
-{formatted_history}
+{formatted}
 
 User Query:
-{user_input}
+{text}
 """
 
-    response = model.generate_content(combined_context)
+    # call Gemini
+    if image_fs:
+        img = image_from_file_storage(image_fs)
+        resp = model.generate_content([ctx, img])
+    else:
+        resp = model.generate_content(ctx)
 
-    if user_role == "manager":
-        history.append({"role": user_role, "parts": [user_input]})
-        history.append({"role": "model", "parts": [response.text]})
+    # only managers persist history
+    if role == "manager":
+        history.append({"role": role, "parts": [text]})
+        history.append({"role": "model", "parts": [resp.text]})
         save_chat_history(history)
 
-    return jsonify({
-        "reply": response.text,
-        "new_messages": history
-    })
+    return jsonify(reply=resp.text, new_messages=history)
 
 @app.route("/stream", methods=["POST"])
 @jwt_required()
 def stream():
-    def generate():
+    def gen():
         data = request.json
-        msg = data.get('chat', '')
+        text = data.get("chat", "")
 
         history = load_chat_history()
-        formatted_history = format_history(history)
+        formatted = format_history(history)
+        me = get_jwt_identity()
+        u = User.objects(username=me).first()
+        role = u.role if u else "user"
 
-        # Get current user from JWT
-        current_user = get_jwt_identity()
-        user = User.objects(username=current_user).first()
-        user_role = user.role if user else "user"
-
-        combined_context = f"""
+        ctx = f"""
 Project Documentation:
 {project_docs}
 
 Conversation History:
-{formatted_history}
+{formatted}
 
 User Query:
-{msg}
+{text}
 """
 
-        response = model.generate_content(combined_context, stream=True)
-
-        collected_response = ""
+        # streaming only handles text—for image streaming you'd
+        # need to buffer similarly as above
+        response = model.generate_content(ctx, stream=True)
+        full = ""
         for chunk in response:
-            collected_response += chunk.text
+            full += chunk.text
             yield chunk.text
 
-        if user_role == "manager":
-            history.append({"role": user_role, "parts": [msg]})
-            history.append({"role": "model", "parts": [collected_response]})
+        if role == "manager":
+            history.append({"role": role, "parts": [text]})
+            history.append({"role": "model", "parts": [full]})
             save_chat_history(history)
 
-    return Response(stream_with_context(generate()), mimetype="text/event-stream")
+    return Response(stream_with_context(gen()), mimetype="text/event-stream")
 
-def load_chat_history():
-    history = []
-    messages = ChatMessage.objects().all()  # Load chat history from MongoDB
-    for msg in messages:
-        history.append({"role": msg.role, "parts": [msg.content]})
-    return history
 
-def save_chat_history(history):
-    ChatMessage.objects.delete()  # Delete all existing chat messages
-    for item in history:
-        msg = ChatMessage(role=item["role"], content=item["parts"][0])
-        msg.save()
+# ——— Run App —————————————————————————————————————————————————————————————
 
-def format_history(history):
-    text = ""
-    for msg in history:
-        role = msg.get("role", "unknown").capitalize()
-        parts = msg.get("parts", [])
-        for part in parts:
-            content = part if isinstance(part, str) else part.get("text", "")
-            text += f"{role}: {content}\n"
-    return text
-
-if __name__ == '__main__':
-    app.run(port=os.getenv("PORT"))
+if __name__ == "__main__":
+    app.run(port=int(os.getenv("PORT", 9000)), debug=True)

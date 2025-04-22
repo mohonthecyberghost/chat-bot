@@ -17,31 +17,50 @@
 
 /** Import necessary modules. */
 import React from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPaperPlane } from '@fortawesome/free-solid-svg-icons';
+import { FaPaperPlane, FaImage } from 'react-icons/fa';
 
-/** Submission using the Enter key or button. */
-const MessageInput = ({ inputRef, waiting, handleClick }) => {
-  return (
-    <div className="message-input">
-      <input
-        className="chat_msg_input"
-        type="text"
-        name="chat"
-        placeholder="Enter a message."
-        ref={inputRef}
-        disabled={waiting}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") handleClick();
-        }}
-      />
-      <button className="chat_msg_btn" onClick={handleClick}>
-        <span className="fa-span-send">
-          <FontAwesomeIcon icon={faPaperPlane} />
-        </span>
-      </button>
-    </div>
-  );
+const MessageInput = ({ inputRef, waiting, handleClick, handleFileChange }) => {
+    const fileInputRef = React.useRef();
+
+    const triggerFilePicker = () => {
+        fileInputRef.current.click();
+    };
+
+    return (
+        <div className="input-area">
+            <input
+                ref={inputRef}
+                className="text-input"
+                placeholder={waiting ? "Waiting for response..." : "Enter your message"}
+                disabled={waiting}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleClick();
+                    }
+                }}
+            />
+
+            {/* Hidden file input */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+            />
+
+            {/* Image upload button */}
+            <button className="icon-button" onClick={triggerFilePicker} disabled={waiting} title="Upload Image">
+                <FaImage size={20} />
+            </button>
+
+            {/* Send button */}
+            <button className="icon-button" onClick={handleClick} disabled={waiting} title="Send">
+                <FaPaperPlane size={18} />
+            </button>
+        </div>
+    );
 };
 
 export default MessageInput;
