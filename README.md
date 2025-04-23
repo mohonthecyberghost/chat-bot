@@ -1,6 +1,6 @@
 # 💬 AI Chatbot with Image Support (React + Flask + Gemini)
 
-A full-stack AI chatbot powered by Google's Gemini 1.5 Flash model, allowing users to have dynamic conversations with support for both text and image input/output. Built using React (frontend), Flask (backend), MongoDB (chat history), and JWT authentication.
+A full-stack AI chatbot powered by Google's Gemini 1.5 Flash model, allowing users to have dynamic conversations with support Based on Project Documentation with both text and image input. Built using React (frontend), Flask (backend), MongoDB (chat history), and JWT authentication.
 
 ---
 
