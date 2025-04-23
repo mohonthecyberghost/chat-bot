@@ -1,219 +1,184 @@
-# Copyright 2024 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at:
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-from flask import Flask, request, Response, stream_with_context, jsonify, session
-from flask_cors import CORS
+from flask import (
+    Flask, request, jsonify, Response, stream_with_context
+)
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-import google.generativeai as genai
-from dotenv import load_dotenv
+from flask_jwt_extended import (
+    JWTManager, create_access_token,
+    jwt_required, get_jwt_identity
+)
+from flask_cors import CORS
+from mongoengine import connect
+from models.models import User, ChatMessage
 import os
-import json
+from dotenv import load_dotenv
+import google.generativeai as genai
+from PIL import Image
+import io
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from models import Session, ChatMessage, User
-
-# Load environment variables from a .env file
+# ——— Configuration —————————————————————————————————————————————————————————
 load_dotenv()
 
-# Initialize Flask app
+# MongoDB
+connect(
+    db=os.getenv("MONGO_DB_NAME"),
+    host=os.getenv("MONGO_URI")
+)
+
+# Flask app
 app = Flask(__name__)
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "super-secret")
 CORS(app)
 
-# Setup JWT
-app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "super-secret")
+# Extensions
 jwt = JWTManager(app)
-
-# Setup Bcrypt
 bcrypt = Bcrypt(app)
 
-# Configure Gemini
+# Gemini
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
-# Load docs
+# Load your project docs once
 project_docs = ""
-def load_docs():
-    global project_docs
-    with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
-        project_docs = f.read()
-load_docs()
+with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
+    project_docs = f.read()
 
-# Chat history helpers
+
+# ——— Helpers ———————————————————————————————————————————————————————————————
 
 def load_chat_history():
-    session = Session()
-    messages = session.query(ChatMessage).order_by(ChatMessage.timestamp).all()
-    session.close()
-    return [{"role": m.role, "parts": [m.content]} for m in messages]
+    return [
+        {"role": m.role, "parts": [m.content]}
+        for m in ChatMessage.objects.order_by("timestamp")
+    ]
 
 def save_chat_history(history):
-    session = Session()
-    session.query(ChatMessage).delete()
+    ChatMessage.objects.delete()
     for item in history:
-        msg = ChatMessage(role=item["role"], content=item["parts"][0])
-        session.add(msg)
-    session.commit()
-    session.close()
+        ChatMessage(role=item["role"], content=item["parts"][0]).save()
 
 def format_history(history):
-    text = ""
+    out = ""
     for msg in history:
-        role = msg.get("role", "unknown").capitalize()
-        parts = msg.get("parts", [])
-        for part in parts:
-            content = part if isinstance(part, str) else part.get("text", "")
-            text += f"{role}: {content}\n"
-    return text
+        r = msg.get("role", "").capitalize()
+        for part in msg.get("parts", []):
+            txt = part if isinstance(part, str) else part.get("text", "")
+            out += f"{r}: {txt}\n"
+    return out
 
-# Auth endpoints
+def image_from_file_storage(fs):
+    """Load a PIL.Image from Flask FileStorage."""
+    img_bytes = fs.read()
+    return Image.open(io.BytesIO(img_bytes))
+
+
+# ——— Routes ———————————————————————————————————————————————————————————————
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
+    u, p = data.get("username"), data.get("password")
+    if not u or not p:
+        return jsonify(error="Missing username or password"), 400
 
-    if not username or not password:
-        return jsonify({"error": "Missing username or password"}), 400
+    if User.objects(username=u).first():
+        return jsonify(error="User already exists"), 400
 
-    session_db = Session()
-    existing_user = session_db.query(User).filter_by(username=username).first()
-
-    if existing_user:
-        session_db.close()
-        return jsonify({"error": "User already exists"}), 400
-
-    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
-    new_user = User(username=username, password=hashed_pw)
-    session_db.add(new_user)
-    session_db.commit()
-    session_db.close()
-
-    return jsonify({"message": "User registered successfully"})
+    hp = bcrypt.generate_password_hash(p).decode("utf-8")
+    User(username=u, password=hp).save()
+    return jsonify(message="User registered successfully")
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
+    u, p = data.get("username"), data.get("password")
+    user = User.objects(username=u).first()
+    if user and bcrypt.check_password_hash(user.password, p):
+        tok = create_access_token(identity=u)
+        return jsonify(token=tok)
+    return jsonify(error="Invalid credentials"), 401
 
-    session_db = Session()
-    user = session_db.query(User).filter_by(username=username).first()
-    session_db.close()
-
-    if user and bcrypt.check_password_hash(user.password, password):
-        token = create_access_token(identity=username)
-        return jsonify({"token": token})
-    else:
-        return jsonify({"error": "Invalid credentials"}), 401
-
-# Chat endpoint
 @app.route("/chat", methods=["POST"])
 @jwt_required()
 def chat():
-    data = request.json
-    user_input = data.get("user_input")
+    # get text + optional image
+    text = request.form.get("user_input", "")
+    image_fs = request.files.get("image")
 
-    if not user_input:
-        return jsonify({"error": "Missing user_input"}), 400
-
+    # load history & user role
     history = load_chat_history()
-    formatted_history = format_history(history)
+    formatted = format_history(history)
+    me = get_jwt_identity()
+    u = User.objects(username=me).first()
+    role = u.role if u else "user"
 
-    # Step 1: Get the username from the JWT
-    current_user = get_jwt_identity()
-
-    # Step 2: Get user role from DB
-    session_db = Session()
-    user = session_db.query(User).filter_by(username=current_user).first()
-    user_role = user.role if user else "user"
-    session_db.close()
-
-    combined_context = f"""
+    # build context
+    ctx = f"""
 Project Documentation:
 {project_docs}
 
 Conversation History:
-{formatted_history}
+{formatted}
 
 User Query:
-{user_input}
+{text}
 """
 
-    response = model.generate_content(combined_context)
+    # call Gemini
+    if image_fs:
+        img = image_from_file_storage(image_fs)
+        resp = model.generate_content([ctx, img])
+    else:
+        resp = model.generate_content(ctx)
 
-    if user_role=="manager":
-        history.append({"role": user_role, "parts": [user_input]})
-        history.append({"role": "model", "parts": [response.text]})
+    # only managers persist history
+    if role == "manager":
+        history.append({"role": role, "parts": [text]})
+        history.append({"role": "model", "parts": [resp.text]})
         save_chat_history(history)
 
-
-    return jsonify({
-        "reply": response.text,
-        "new_messages": history
-    })
-
-@app.route("/history", methods=["GET"])
-@jwt_required()
-def get_history():
-    return jsonify(load_chat_history())
+    return jsonify(reply=resp.text, new_messages=history)
 
 @app.route("/stream", methods=["POST"])
 @jwt_required()
 def stream():
-    def generate():
+    def gen():
         data = request.json
-        msg = data.get('chat', '')
+        text = data.get("chat", "")
 
         history = load_chat_history()
-        formatted_history = format_history(history)
+        formatted = format_history(history)
+        me = get_jwt_identity()
+        u = User.objects(username=me).first()
+        role = u.role if u else "user"
 
-
-        # Step 1: Get the username from the JWT
-        current_user = get_jwt_identity()
-
-        # Step 2: Get user role from DB
-        session_db = Session()
-        user = session_db.query(User).filter_by(username=current_user).first()
-        user_role = user.role if user else "user"
-        session_db.close()
-
-        combined_context = f"""
+        ctx = f"""
 Project Documentation:
 {project_docs}
 
 Conversation History:
-{formatted_history}
+{formatted}
 
 User Query:
-{msg}
+{text}
 """
 
-        response = model.generate_content(combined_context, stream=True)
-
-        collected_response = ""
+        # streaming only handles text—for image streaming you'd
+        # need to buffer similarly as above
+        response = model.generate_content(ctx, stream=True)
+        full = ""
         for chunk in response:
-            collected_response += chunk.text
+            full += chunk.text
             yield chunk.text
 
-        if user_role=="manager":
-            history.append({"role": user_role, "parts": [msg]})
-            history.append({"role": "model", "parts": [collected_response]})
+        if role == "manager":
+            history.append({"role": role, "parts": [text]})
+            history.append({"role": "model", "parts": [full]})
             save_chat_history(history)
 
-    return Response(stream_with_context(generate()), mimetype="text/event-stream")
+    return Response(stream_with_context(gen()), mimetype="text/event-stream")
 
-if __name__ == '__main__':
-    app.run(port=os.getenv("PORT"))
+
+# ——— Run App —————————————————————————————————————————————————————————————
+
+if __name__ == "__main__":
+    app.run(port=int(os.getenv("PORT", 9000)), debug=True)

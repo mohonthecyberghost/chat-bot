@@ -8,10 +8,10 @@ import ConversationDisplayArea from '../components/ConversationDisplayArea.js';
 import Header from '../components/Header.js';
 import MessageInput from '../components/MessageInput.js';
 
-
-
 function ChatPage() {
   const inputRef = useRef();
+  const [imageFile, setImageFile] = useState(null);
+
   const host = "http://localhost:9000";
   const url = host + "/chat";
   const streamUrl = host + "/stream";
@@ -24,153 +24,117 @@ function ChatPage() {
 
   const is_stream = toggled;
 
-  function executeScroll() {
-    const element = document.getElementById('checkpoint');
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  }
-
-  function validationCheck(str) {
-    return str === null || str.match(/^\s*$/) !== null;
-  }
-
-  const handleClickOld = async () => {
-    if (!inputRef.current.value.trim()) return;
-
-    const userMsg = {
-      role: "user",
-      parts: [{ text: inputRef.current.value }]
-    };
-    const updatedData = [...data, userMsg];
-
-    flushSync(() => {
-      setData(updatedData);
-      inputRef.current.value = "";
-      setWaiting(true);
-    });
-
-    try {
-      //const res = await axios.post(url, { user_input: userMsg.parts[0].text });
-
-      const token = localStorage.getItem("token");
-      const res = await axios.post(url, { user_input: userMsg.parts[0].text }, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const reply = res.data.reply;
-      const modelMsg = {
-        role: "model",
-        parts: [{ text: reply }]
-      };
-      setData(prev => [...prev, modelMsg]);
-    } catch (err) {
-      setData(prev => [...prev, { role: "model", parts: [{ text: "Error occurred." }] }]);
-    }
-    setWaiting(false);
+  const executeScroll = () => {
+    const el = document.getElementById('checkpoint');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const validationCheck = (str) => {
+    return !str || str.match(/^\s*$/);
+  };
 
+  const handleFileChange = (e) => {
+    setImageFile(e.target.files[0] || null);
+  };
 
   const handleClick = () => {
-    if (validationCheck(inputRef.current.value)) {
-      console.log("Empty or invalid entry");
+    const text = inputRef.current.value.trim();
+    // Require at least text or image
+    if (!text && !imageFile) return;
+
+    // If there's an image, always send non‑streaming (binary + text)
+    if (imageFile) {
+      handleNonStreamingChat(text);
+    } else if (is_stream) {
+      handleStreamingChat();
     } else {
-
-      console.log("is_stream : "+is_stream);
-
-      if (!is_stream) {
-        handleNonStreamingChat();
-      } else {
-        handleStreamingChat();
-      }
+      handleNonStreamingChat(text);
     }
   };
 
-  // Convert frontend chat format to Gemini backend format
-  const toGeminiFormat = (chatHistory) => {
-    return chatHistory.map(msg => ({
-      role: msg.role,
-      parts: msg.parts.map(p => typeof p === 'string' ? p : p.text)
-    }));
-  };
+  const handleNonStreamingChat = async (text) => {
+    // Build the user message including optional image preview
+    const userMsg = { role: "user", parts: [] };
+    if (text) userMsg.parts.push({ text });
+    if (imageFile) {
+      userMsg.imageUrl = URL.createObjectURL(imageFile);
+      userMsg.parts.push({ text: "📷 Image uploaded" });
+    }
 
-  const handleNonStreamingChat = async () => {
-    if (!inputRef.current.value.trim()) return;
-
-    const userMsg = {
-      role: "user",
-      parts: [{ text: inputRef.current.value }]
-    };
+    // Optimistically render it
     const updatedData = [...data, userMsg];
-
     flushSync(() => {
       setData(updatedData);
       inputRef.current.value = "";
-      inputRef.current.placeholder = "Waiting for model's response";
+      setImageFile(null);
       setWaiting(true);
     });
-
     executeScroll();
 
     try {
-      //const res = await axios.post(url, { user_input: userMsg.parts[0].text });
-
       const token = localStorage.getItem("token");
-      const res = await axios.post(url, { user_input: userMsg.parts[0].text }, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      let res;
+
+      if (imageFile) {
+        // multipart/form-data for file + text
+        const formData = new FormData();
+        formData.append("user_input", text);
+        formData.append("image", imageFile);
+
+        res = await axios.post(url, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`
+          }
+        });
+      } else {
+        // pure JSON text
+        res = await axios.post(
+            url,
+            { user_input: text },
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
 
       const reply = res.data.reply;
-      const modelMsg = {
-        role: "model",
-        parts: [{ text: reply }]
-      };
-      //setData(prev => [...prev, modelMsg]);
+      const modelMsg = { role: "model", parts: [{ text: reply }] };
 
       flushSync(() => {
         setData(prev => [...prev, modelMsg]);
-        inputRef.current.placeholder = "Enter a message.";
         setWaiting(false);
       });
       executeScroll();
 
-
     } catch (err) {
-      setData(prev => [...prev, { role: "model", parts: [{ text: "Error occurred." }] }]);
+      flushSync(() => {
+        setData(prev => [
+          ...prev,
+          { role: "model", parts: [{ text: "Error occurred." }] }
+        ]);
+        setWaiting(false);
+      });
     }
-    setWaiting(false);
   };
 
   const handleStreamingChat = async () => {
-    if (!inputRef.current.value.trim()) return;
+    const text = inputRef.current.value.trim();
+    if (!text) return;
 
-    const userMessage = inputRef.current.value;
     const token = localStorage.getItem("token");
-
-    const frontendUserMsg = {
-      role: "user",
-      parts: [{ text: userMessage }]
-    };
-
+    const frontendUserMsg = { role: "user", parts: [{ text }] };
     const updatedData = [...data, frontendUserMsg];
 
     flushSync(() => {
       setData(updatedData);
       inputRef.current.value = "";
-      inputRef.current.placeholder = "Waiting for model's response";
       setWaiting(true);
       setAnswer("");
+      showStreamdiv(true);
     });
-
     executeScroll();
 
     const requestBody = {
-      chat: userMessage,
+      chat: text,
       history: data.map(msg => ({
         role: msg.role,
         parts: msg.parts.map(p => (typeof p === 'string' ? p : p.text))
@@ -182,153 +146,68 @@ function ChatPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(requestBody)
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error("Streaming failed");
-      }
+      if (!response.ok || !response.body) throw new Error("Stream failed");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullResponse = "";
 
-      showStreamdiv(true);
-
       const readChunk = async () => {
         const { value, done } = await reader.read();
         if (done) {
           showStreamdiv(false);
+          const modelMsg = { role: "model", parts: [{ text: fullResponse }] };
           flushSync(() => {
-            const modelMsg = {
-              role: "model",
-              parts: [{ text: fullResponse }]
-            };
             setData(prev => [...prev, modelMsg]);
             setWaiting(false);
-            inputRef.current.placeholder = "Enter a message.";
           });
+          executeScroll();
           return;
         }
-
         const chunk = decoder.decode(value, { stream: true });
         fullResponse += chunk;
         setAnswer(prev => prev + chunk);
         executeScroll();
-        await readChunk(); // Recursively read next chunk
+        await readChunk();
       };
 
       await readChunk();
 
     } catch (error) {
-      console.error("Streaming error:", error);
       flushSync(() => {
-        setData(prev => [...prev, {
-          role: "model",
-          parts: [{ text: "Streaming error occurred." }]
-        }]);
+        setData(prev => [
+          ...prev,
+          { role: "model", parts: [{ text: "Streaming error occurred." }] }
+        ]);
         setWaiting(false);
-        inputRef.current.placeholder = "Enter a message.";
-        showStreamdiv(false);
-      });
-    }
-  };
-
-
-
-  const handleStreamingChatOld = async () => {
-    const userMessage = inputRef.current.value;
-
-    const frontendUserMsg = {
-      role: "user",
-      parts: [{ text: userMessage }]
-    };
-
-    const updatedData = [...data, frontendUserMsg];
-
-    flushSync(() => {
-      setData(updatedData);
-      inputRef.current.value = "";
-      inputRef.current.placeholder = "Waiting for model's response";
-      setWaiting(true);
-    });
-
-    executeScroll();
-
-    const requestBody = {
-      chat: userMessage,
-      history: toGeminiFormat(data)
-    };
-
-    try {
-      setAnswer("");
-      const response = await fetch(streamUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error("Stream failed.");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let modelResponse = "";
-
-      showStreamdiv(true);
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        setAnswer(prev => prev + chunk);
-        modelResponse += chunk;
-        executeScroll();
-      }
-
-      showStreamdiv(false);
-
-      const frontendModelMsg = {
-        role: "model",
-        parts: [{ text: modelResponse }]
-      };
-
-      flushSync(() => {
-        setData([...updatedData, frontendModelMsg]);
-        setWaiting(false);
-        inputRef.current.placeholder = "Enter a message.";
-      });
-
-    } catch (err) {
-      console.error("Streaming error:", err);
-      flushSync(() => {
-        setData([...updatedData, {
-          role: "model",
-          parts: [{ text: "Error occurred." }]
-        }]);
-        setWaiting(false);
-        inputRef.current.placeholder = "Enter a message.";
         showStreamdiv(false);
       });
     }
   };
 
   return (
-    <center>
-      <div className="chat-app">
-        <Header toggled={toggled} setToggled={setToggled} />
-        <ConversationDisplayArea data={data} streamdiv={streamdiv} answer={answer} />
-        <MessageInput inputRef={inputRef} waiting={waiting} handleClick={handleClick} />
-      </div>
-    </center>
+      <center>
+        <div className="chat-app">
+          <Header toggled={toggled} setToggled={setToggled} />
+          <ConversationDisplayArea
+              data={data}
+              streamdiv={streamdiv}
+              answer={answer}
+          />
+          <MessageInput
+              inputRef={inputRef}
+              waiting={waiting}
+              handleClick={handleClick}
+              handleFileChange={handleFileChange}
+          />
+        </div>
+      </center>
   );
 }
-
 
 export default ChatPage;

@@ -1,16 +1,20 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
-from .database import Base
+from mongoengine import Document, StringField, DateTimeField, ListField
+import datetime
 
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-    id = Column(Integer, primary_key=True)
-    role = Column(String)
-    content = Column(String)
-    timestamp = Column(DateTime, default=func.now())
+class User(Document):
+    username = StringField(unique=True, required=True)
+    password = StringField(required=True)
+    role = StringField(default="user")
 
-class User(Base):
-    __tablename__ = "chat_users"
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)
-    role = Column(String, default="user")
+    meta = {
+        'collection': 'chat_users'
+    }
+
+class ChatMessage(Document):
+    role = StringField(required=True)
+    content = StringField(required=True)
+    timestamp = DateTimeField(default=datetime.datetime.utcnow)
+
+    meta = {
+        'collection': 'chat_messages'
+    }
