@@ -12,7 +12,7 @@ function ChatPage() {
   const inputRef = useRef();
   const [imageFile, setImageFile] = useState(null);
 
-  const host = "http://localhost:9000";
+  const host = "http://10.88.231.44:9000";
   const url = host + "/chat";
   const streamUrl = host + "/stream";
 

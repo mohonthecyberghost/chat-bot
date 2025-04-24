@@ -14,7 +14,7 @@ const Header = ({ toggled, setToggled }) => {
 
   return (
     <div className="chat-header">
-      <h1>KIP AI ChatBOT</h1>
+      <h1>DLT AI ChatBOT</h1>
       <span className='toggle-text'>Stream Response</span>
       <button 
         className={`toggle-btn ${toggled ? "toggled": ""}`}

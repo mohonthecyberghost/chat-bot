@@ -1,25 +1,38 @@
 import React from 'react';
 import Markdown from 'react-markdown';
-import userIcon from '../assets/user-icon.png';
-import chatbotIcon from '../assets/chatbot-icon.png';
+import userIcon from '/user-icon.png';
+import chatbotIcon from '/chatbot-icon.png';
 
 const ChatArea = ({ data, streamdiv, answer }) => {
+    const getIconForRole = (role) => {
+        switch (role) {
+            case 'user':
+                return '/user-icon.png';
+            case 'model':
+                return '/chatbot-icon.png';
+            case 'bot':
+            case 'assistant':
+                return chatbotIcon;
+            default:
+                return chatbotIcon;
+        }
+    };
+
     return (
         <div className="chat-area">
-            {data?.length <= 0 ? (
+            {data?.length === 0 ? (
                 <div className="welcome-area">
                     <p className="welcome-1">Hi,</p>
                     <p className="welcome-2">How can I help you today?</p>
                 </div>
-            ) : (
-                <div className="welcome-area" style={{ display: 'none' }}></div>
-            )}
+            ) : null}
 
             {data.map((element, index) => (
                 <div key={index} className={element.role}>
                     <img
-                        src={element.role === 'user' ? userIcon : chatbotIcon}
-                        alt="Icon"
+                        src={getIconForRole(element.role)}
+                        alt={`${element.role} icon`}
+                        className="chat-icon"
                     />
                     <div className="message-content">
                         <Markdown
@@ -35,7 +48,11 @@ const ChatArea = ({ data, streamdiv, answer }) => {
                                 <img
                                     src={element.imageUrl}
                                     alt="Uploaded"
-                                    style={{ maxWidth: '300px', borderRadius: '8px', marginTop: '8px' }}
+                                    style={{
+                                        maxWidth: '300px',
+                                        borderRadius: '8px',
+                                        marginTop: '8px'
+                                    }}
                                 />
                             </div>
                         )}
@@ -45,7 +62,7 @@ const ChatArea = ({ data, streamdiv, answer }) => {
 
             {streamdiv && (
                 <div className="tempResponse">
-                    <img src={chatbotIcon} alt="Icon" />
+                    <img src={chatbotIcon} alt="AI icon" className="chat-icon" />
                     <div className="message-content">
                         <Markdown
                             components={{

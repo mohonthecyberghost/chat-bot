@@ -54,4 +54,4 @@ Run the application with the following command:
 python app.py
 ```
 
-The server will start on `localhost:9000`.
+The server will start on `10.88.231.44:9000`.

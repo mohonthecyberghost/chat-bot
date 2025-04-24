@@ -18,7 +18,7 @@ function LoginPage() {
     }
 
     try {
-      const response = await fetch('http://localhost:9000/login', {
+      const response = await fetch('http://10.88.231.44:9000/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
