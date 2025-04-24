@@ -30,7 +30,7 @@ import (
 )
 
 const modelName = "gemini-1.5-flash"
-const defaultPort = "9000"
+const defaultPort = "8000"
 
 // Server state holding the context of the Gemini client and the generative model.
 type genaiServer struct {

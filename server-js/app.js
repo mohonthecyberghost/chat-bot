@@ -35,8 +35,8 @@ app.use(express.json());
 /** Apply the CORS middleware. */
 app.use(cors())
 
-/** Enable and listen to port 9000. */
-const PORT = process.env.PORT || 9000;
+/** Enable and listen to port 8000. */
+const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log('Server Listening on PORT:', PORT);
 });

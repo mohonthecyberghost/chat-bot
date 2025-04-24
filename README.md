@@ -65,7 +65,7 @@ pip install -r requirements.txt
 
 Create a .env file inside the backend/ directory:
 ```bash
-PORT=9000
+PORT=8000
 JWT_SECRET_KEY=your_jwt_secret
 GOOGLE_API_KEY=your_google_api_key
 MONGO_DB_NAME=your_db_name

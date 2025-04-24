@@ -21,10 +21,10 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "vite --port 3000",
+    "start": "vite --port 4000",
     "build": "tsc && vite build",
-    "serve": "vite --port 3000",
-    "dev": "vite --port 3000"
+    "serve": "vite --port 4000",
+    "dev": "vite --port 4000"
   },
   "eslintConfig": {
     "extends": [

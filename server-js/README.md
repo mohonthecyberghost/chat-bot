@@ -37,7 +37,7 @@ To run the node.js chat app, use the following command.
 
 `--env-file=.env` tells node.js where the .env file lies.
 
-By default, the app will run on port 9000.
+By default, the app will run on port 8000.
 
 If you want to specify your port, edit the `PORT` key in your `.env` file.
 `PORT=xxxx`

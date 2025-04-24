@@ -8,7 +8,7 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 
 client = MongoClient(MONGO_URI)
-db = client["chatbot-dlt"]  # Database name
+db = client["chatbot-cps"]  # Database name
 
 # Collections
 users_collection = db["chat_users"]

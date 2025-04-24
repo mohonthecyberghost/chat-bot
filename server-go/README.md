@@ -21,4 +21,4 @@ GOOGLE_API_KEY=<your_api_key> PORT=<your_port> go run .
 
 ## Environment Variables
 * GOOGLE_API_KEY: API key for Gemini service.
-* PORT: The port this server is listening on (default 9000).
+* PORT: The port this server is listening on (default 8000).

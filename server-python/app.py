@@ -181,4 +181,4 @@ User Query:
 # ——— Run App —————————————————————————————————————————————————————————————
 
 if __name__ == "__main__":
-    app.run(host="10.88.231.44",port=int(os.getenv("PORT", 9000)), debug=True)
+    app.run(host="10.88.231.44",port=int(os.getenv("PORT", 8000)), debug=True)
