@@ -13,3 +13,4 @@ db = client["chatbot-cps"]  # Database name
 # Collections
 users_collection = db["chat_users"]
 messages_collection = db["chat_messages"]
+messages_collection_full = db["chat_messages_full"]

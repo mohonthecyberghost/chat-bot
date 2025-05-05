@@ -11,6 +11,7 @@ import MessageInput from '../components/MessageInput.js';
 function ChatPage() {
   const inputRef = useRef();
   const [imageFile, setImageFile] = useState(null);
+  const [pdfFile, setPdfFile] = useState(null);
 
   const host = "http://10.88.231.44:8000";
   const url = host + "/chat";
@@ -29,21 +30,19 @@ function ChatPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const validationCheck = (str) => {
-    return !str || str.match(/^\s*$/);
-  };
-
   const handleFileChange = (e) => {
     setImageFile(e.target.files[0] || null);
   };
 
+  const handlePdfChange = (e) => {
+    setPdfFile(e.target.files[0] || null);
+  };
+
   const handleClick = () => {
     const text = inputRef.current.value.trim();
-    // Require at least text or image
-    if (!text && !imageFile) return;
+    if (!text && !imageFile && !pdfFile) return;
 
-    // If there's an image, always send non‑streaming (binary + text)
-    if (imageFile) {
+    if (imageFile || pdfFile) {
       handleNonStreamingChat(text);
     } else if (is_stream) {
       handleStreamingChat();
@@ -52,78 +51,25 @@ function ChatPage() {
     }
   };
 
-  const handleNonStreamingChat = async (text) => {
-    // Build the user message including optional image preview
+  const handleStreamingChat = async () => {
+    const text = inputRef.current.value.trim();
+    if (!text && !imageFile && !pdfFile) return;
+
+    const token = localStorage.getItem("token");
+
+    // Create the user's message object
     const userMsg = { role: "user", parts: [] };
     if (text) userMsg.parts.push({ text });
     if (imageFile) {
       userMsg.imageUrl = URL.createObjectURL(imageFile);
       userMsg.parts.push({ text: "📷 Image uploaded" });
     }
-
-    // Optimistically render it
-    const updatedData = [...data, userMsg];
-    flushSync(() => {
-      setData(updatedData);
-      inputRef.current.value = "";
-      setImageFile(null);
-      setWaiting(true);
-    });
-    executeScroll();
-
-    try {
-      const token = localStorage.getItem("token");
-      let res;
-
-      if (imageFile) {
-        // multipart/form-data for file + text
-        const formData = new FormData();
-        formData.append("user_input", text);
-        formData.append("image", imageFile);
-
-        res = await axios.post(url, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${token}`
-          }
-        });
-      } else {
-        // pure JSON text
-        res = await axios.post(
-            url,
-            { user_input: text },
-            { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
-
-      const reply = res.data.reply;
-      const modelMsg = { role: "model", parts: [{ text: reply }] };
-
-      flushSync(() => {
-        setData(prev => [...prev, modelMsg]);
-        setWaiting(false);
-      });
-      executeScroll();
-
-    } catch (err) {
-      flushSync(() => {
-        setData(prev => [
-          ...prev,
-          { role: "model", parts: [{ text: "Error occurred." }] }
-        ]);
-        setWaiting(false);
-      });
+    if (pdfFile) {
+      userMsg.parts.push({ text: "📄 PDF uploaded" });
     }
-  };
 
-  const handleStreamingChat = async () => {
-    const text = inputRef.current.value.trim();
-    if (!text) return;
-
-    const token = localStorage.getItem("token");
-    const frontendUserMsg = { role: "user", parts: [{ text }] };
-    const updatedData = [...data, frontendUserMsg];
-
+    // Optimistically update UI
+    const updatedData = [...data, userMsg];
     flushSync(() => {
       setData(updatedData);
       inputRef.current.value = "";
@@ -133,22 +79,19 @@ function ChatPage() {
     });
     executeScroll();
 
-    const requestBody = {
-      chat: text,
-      history: data.map(msg => ({
-        role: msg.role,
-        parts: msg.parts.map(p => (typeof p === 'string' ? p : p.text))
-      }))
-    };
+    // Prepare FormData for stream
+    const formData = new FormData();
+    formData.append("user_input", text);
+    if (imageFile) formData.append("image", imageFile);
+    if (pdfFile) formData.append("pdf", pdfFile);
 
     try {
       const response = await fetch(streamUrl, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(requestBody)
+        body: formData
       });
 
       if (!response.ok || !response.body) throw new Error("Stream failed");
@@ -164,11 +107,14 @@ function ChatPage() {
           const modelMsg = { role: "model", parts: [{ text: fullResponse }] };
           flushSync(() => {
             setData(prev => [...prev, modelMsg]);
+            setImageFile(null);
+            setPdfFile(null);
             setWaiting(false);
           });
           executeScroll();
           return;
         }
+
         const chunk = decoder.decode(value, { stream: true });
         fullResponse += chunk;
         setAnswer(prev => prev + chunk);
@@ -190,6 +136,65 @@ function ChatPage() {
     }
   };
 
+
+  const handleNonStreamingChat = async (text) => {
+    const userMsg = { role: "user", parts: [] };
+    if (text) userMsg.parts.push({ text });
+
+    if (imageFile) {
+      userMsg.imageUrl = URL.createObjectURL(imageFile);
+      userMsg.parts.push({ text: "📷 Image uploaded" });
+    }
+
+    if (pdfFile) {
+      userMsg.parts.push({ text: "📄 PDF uploaded" });
+    }
+
+    const updatedData = [...data, userMsg];
+    flushSync(() => {
+      setData(updatedData);
+      inputRef.current.value = "";
+      setWaiting(true);
+    });
+    executeScroll();
+
+    try {
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
+      formData.append("user_input", text);
+      if (imageFile) formData.append("image", imageFile);
+      if (pdfFile) formData.append("pdf", pdfFile);
+
+      const res = await axios.post(url, formData, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+      });
+
+      const reply = res.data.reply;
+      const modelMsg = { role: "model", parts: [{ text: reply }] };
+
+      flushSync(() => {
+        setData(prev => [...prev, modelMsg]);
+        setImageFile(null);
+        setPdfFile(null);
+        setWaiting(false);
+      });
+      executeScroll();
+    } catch (err) {
+      flushSync(() => {
+        setData(prev => [
+          ...prev,
+          { role: "model", parts: [{ text: "Error occurred." }] }
+        ]);
+        setWaiting(false);
+      });
+    }
+  };
+
+  // ...handleStreamingChat remains unchanged...
+
   return (
       <center>
         <div className="chat-app">
@@ -198,12 +203,14 @@ function ChatPage() {
               data={data}
               streamdiv={streamdiv}
               answer={answer}
+              loading={waiting}
           />
           <MessageInput
               inputRef={inputRef}
               waiting={waiting}
               handleClick={handleClick}
               handleFileChange={handleFileChange}
+              handlePdfChange={handlePdfChange}
           />
         </div>
       </center>

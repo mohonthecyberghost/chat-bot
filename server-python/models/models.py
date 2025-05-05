@@ -18,3 +18,13 @@ class ChatMessage(Document):
     meta = {
         'collection': 'chat_messages'
     }
+
+
+class ChatMessageFull(Document):
+    role = StringField(required=True)
+    content = StringField(required=True)
+    timestamp = DateTimeField(default=datetime.datetime.utcnow)
+
+    meta = {
+        'collection': 'chat_messages_full'
+    }

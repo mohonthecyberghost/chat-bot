@@ -146,8 +146,8 @@ body {
   }
 
 .user > img {
-  height: 30px; 
-  max-width: 30px;
+  height: 37px;
+  max-width: 37px;
   border-radius: 50%;
   flex-grow: 1;
   }
@@ -166,8 +166,8 @@ body {
   }
 
 .model > img {
-  height: 30px; 
-  max-width: 30px;
+  height: 37px;
+  max-width: 37px;
   border-radius: 50%;
   flex-grow: 1;
   }
@@ -205,8 +205,8 @@ body {
 }
 
 .tempResponse > img {
-  height: 30px; 
-  max-width: 30px;
+  height: 37px;
+  max-width: 37px;
   border-radius: 50%;
   flex-grow: 1;
 }
@@ -256,6 +256,30 @@ body {
 
 .message-content{
   padding: 3px 0px 0px 6px;
+}
+
+.message-content p{
+  margin: 3px 0px;
+}
+
+.loading-indicator{
+  float: left;
+  padding-left: 50px;
+}
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #333;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 
@@ -343,4 +367,68 @@ body {
 .auth-form button {
   width: 100%;
   padding: 10px;
+}
+
+/* Chat message container */
+.user .message-content,
+.model .message-content,
+.tempResponse .message-content{
+  padding: 10px 15px;
+  border-radius: 16px;
+  max-width: 100%;
+  word-wrap: break-word;
+  font-size: 15px;
+}
+
+/* User bubble (right aligned) */
+.user .message-content {
+  background-color: #e1ecff;
+  align-self: flex-end;
+  margin-right: auto;
+  color: #000;
+}
+
+/* Model/AI bubble (left aligned) */
+.tempResponse .message-content,
+.model .message-content {
+  background-color: #e9f7fd;
+  align-self: flex-start;
+  margin-right: auto;
+  color: #000;
+}
+
+/* Message wrapper to make alignment work */
+.user,
+.model {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.user {
+  justify-content: flex-end;
+}
+
+.model {
+  justify-content: flex-start;
+}
+
+
+
+
+.message-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.message-content th,
+.message-content td {
+  border: 1px solid #ccc;
+  padding: 6px;
+  text-align: left;
+}
+
+.message-content th {
+  background-color: #eeeeee;
 }
