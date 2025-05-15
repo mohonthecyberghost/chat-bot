@@ -95,6 +95,24 @@ const ChatArea = ({ data, streamdiv, answer, loading, expandedMessages, onReadMo
                 </div>
             ))}
 
+            {/* Show either loading indicator OR streaming response, but not both */}
+            {loading && !streamdiv && (
+                <div className="loading-indicator">
+                    <img
+                        src={chatbotIcon}
+                        alt="AI icon"
+                        className="chat-icon"
+                    />
+                    <div className="message-content">
+                        <img
+                            src="/chatbot-thinking.gif"
+                            alt="Loading"
+                            className="thinking-gif"
+                        />
+                    </div>
+                </div>
+            )}
+
             {streamdiv && (
                 <div className="tempResponse">
                     <img src={chatbotIcon} alt="AI icon" className="chat-icon" />
@@ -106,24 +124,6 @@ const ChatArea = ({ data, streamdiv, answer, loading, expandedMessages, onReadMo
                         >
                             {answer}
                         </Markdown>
-                    </div>
-                </div>
-            )}
-
-            {/* ——— Loading Spinner ——— */}
-            {loading && (
-                <div className="loading-indicator">
-                    <img
-                        src={chatbotIcon}
-                        alt="AI icon"
-                        className="chat-icon"
-                    />
-                    <div className="message-content">
-                        <img
-                            src={thinkingGif}
-                            alt="Loading"
-                            className="thinking-gif"
-                        />
                     </div>
                 </div>
             )}

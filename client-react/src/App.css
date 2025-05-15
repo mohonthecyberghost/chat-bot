@@ -420,8 +420,8 @@ body {
 }
 
 .loading-indicator .thinking-gif {
-  width: 40px;
-  height: 40px;
+  width: 70px;
+  height: 70px;
   object-fit: contain;
 }
 
@@ -437,12 +437,6 @@ body {
   margin: 0;
   color: #666;
   font-size: 14px;
-}
-
-/* Remove unused styles */
-.loading-indicator .message-content,
-.loading-indicator .message-content p {
-  display: none;
 }
 
 /* Night mode styles */

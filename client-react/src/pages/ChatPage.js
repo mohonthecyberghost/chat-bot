@@ -76,9 +76,9 @@ function ChatPage() {
     flushSync(() => {
       setData(updatedData);
       inputRef.current.value = "";
-      setWaiting(true);
-      setAnswer("");
-      showStreamdiv(true);
+      setWaiting(true);  // Show loading indicator
+      setAnswer("");     // Clear previous answer
+      showStreamdiv(false); // Don't show streaming container yet
     });
     executeScroll();
 
@@ -113,6 +113,7 @@ function ChatPage() {
             setImageFile(null);
             setPdfFile(null);
             setWaiting(false);
+            setAnswer(""); // Clear the streaming answer
           });
           executeScroll();
           return;
@@ -120,6 +121,15 @@ function ChatPage() {
 
         const chunk = decoder.decode(value, { stream: true });
         fullResponse += chunk;
+        
+        // When we get the first chunk, switch from loading to streaming
+        if (!answer) {
+          flushSync(() => {
+            setWaiting(false);
+            showStreamdiv(true);
+          });
+        }
+        
         setAnswer(prev => prev + chunk);
         executeScroll();
         await readChunk();
@@ -135,6 +145,7 @@ function ChatPage() {
         ]);
         setWaiting(false);
         showStreamdiv(false);
+        setAnswer(""); // Clear the streaming answer
       });
     }
   };
@@ -271,16 +282,13 @@ function ChatPage() {
       <div className="chat-area">
         <ConversationDisplayArea
           data={data}
+          streamdiv={streamdiv}
+          answer={answer}
+          loading={waiting}
           expandedMessages={expandedMessages}
           loadingFullResponses={loadingFullResponses}
           onReadMore={handleReadMore}
         />
-        {streamdiv && (
-          <div className="tempResponse">
-            <img src="/bot.png" alt="Bot" />
-            <p className="message-content">{answer}</p>
-          </div>
-        )}
         <div id="checkpoint"></div>
       </div>
       <MessageInput
