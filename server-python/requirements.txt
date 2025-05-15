@@ -6,3 +6,4 @@ flask-bcrypt
 flask_jwt_extended
 mongoengine
 Pillow
+PyPDF2

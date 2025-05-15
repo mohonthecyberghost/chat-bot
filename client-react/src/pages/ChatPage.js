@@ -7,13 +7,16 @@ import '../App.css';
 import ConversationDisplayArea from '../components/ConversationDisplayArea.js';
 import Header from '../components/Header.js';
 import MessageInput from '../components/MessageInput.js';
+import Navigation from '../components/Navigation.js';
 
 function ChatPage() {
   const inputRef = useRef();
   const [imageFile, setImageFile] = useState(null);
   const [pdfFile, setPdfFile] = useState(null);
+  const [expandedMessages, setExpandedMessages] = useState(new Set());
+  const [loadingFullResponses, setLoadingFullResponses] = useState(new Set());
 
-  const host = "http://10.88.231.44:8000";
+  const host = "http://10.88.231.7:8000";
   const url = host + "/chat";
   const streamUrl = host + "/stream";
 
@@ -136,6 +139,69 @@ function ChatPage() {
     }
   };
 
+  const handleReadMore = async (index) => {
+    try {
+      console.log("Read more clicked for index:", index);
+      console.log("Current data:", data);
+      
+      setLoadingFullResponses(prev => {
+        const newSet = new Set(prev);
+        newSet.add(index);
+        return newSet;
+      });
+
+      // Get the user's text from the previous message
+      const userText = data[index - 1]?.parts[0]?.text || "";
+      console.log("User text:", userText);
+
+      // Calculate the correct message index in the full history
+      const fullHistoryIndex = Math.floor(index / 2);
+      console.log("Full history index:", fullHistoryIndex);
+
+      const token = localStorage.getItem("token");
+      console.log("Sending request for full response with index:", fullHistoryIndex);
+      const response = await axios.post(
+        `${host}/get_full_response`,
+        { 
+          message_index: fullHistoryIndex,
+          user_input: userText
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      console.log("Full response received:", response.data);
+      if (response.data.full_reply) {
+        setData(prev => {
+          const newData = [...prev];
+          if (newData[index]) {
+            newData[index] = {
+              ...newData[index],
+              fullReply: response.data.full_reply
+            };
+          }
+          return newData;
+        });
+      }
+
+      setExpandedMessages(prev => {
+        const newSet = new Set(prev);
+        newSet.add(index);
+        return newSet;
+      });
+    } catch (error) {
+      console.error("Error fetching full response:", error);
+    } finally {
+      setLoadingFullResponses(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }
+  };
 
   const handleNonStreamingChat = async (text) => {
     const userMsg = { role: "user", parts: [] };
@@ -172,8 +238,13 @@ function ChatPage() {
         },
       });
 
-      const reply = res.data.reply;
-      const modelMsg = { role: "model", parts: [{ text: reply }] };
+      const summary = res.data.reply;
+      const fullReply = res.data.full_reply;
+      const modelMsg = { 
+        role: "model", 
+        parts: [{ text: summary }],
+        fullReply: fullReply
+      };
 
       flushSync(() => {
         setData(prev => [...prev, modelMsg]);
@@ -193,27 +264,35 @@ function ChatPage() {
     }
   };
 
-  // ...handleStreamingChat remains unchanged...
-
   return (
-      <center>
-        <div className="chat-app">
-          <Header toggled={toggled} setToggled={setToggled} />
-          <ConversationDisplayArea
-              data={data}
-              streamdiv={streamdiv}
-              answer={answer}
-              loading={waiting}
-          />
-          <MessageInput
-              inputRef={inputRef}
-              waiting={waiting}
-              handleClick={handleClick}
-              handleFileChange={handleFileChange}
-              handlePdfChange={handlePdfChange}
-          />
-        </div>
-      </center>
+    <div className="chat-app">
+      <Navigation />
+      <Header toggled={toggled} setToggled={setToggled} />
+      <div className="chat-area">
+        <ConversationDisplayArea
+          data={data}
+          expandedMessages={expandedMessages}
+          loadingFullResponses={loadingFullResponses}
+          onReadMore={handleReadMore}
+        />
+        {streamdiv && (
+          <div className="tempResponse">
+            <img src="/bot.png" alt="Bot" />
+            <p className="message-content">{answer}</p>
+          </div>
+        )}
+        <div id="checkpoint"></div>
+      </div>
+      <MessageInput
+        inputRef={inputRef}
+        handleClick={handleClick}
+        handleFileChange={handleFileChange}
+        handlePdfChange={handlePdfChange}
+        imageFile={imageFile}
+        pdfFile={pdfFile}
+        waiting={waiting}
+      />
+    </div>
   );
 }
 

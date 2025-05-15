@@ -16,7 +16,7 @@ export default defineConfig({
 
     configureServer: (server) => {
       server.middlewares.use((req, res, next) => {
-        const allowedHosts = ['localhost', '10.88.231.44', 'askqa.konasl.net'];
+        const allowedHosts = ['localhost', '10.88.231.7', 'askqa.konasl.net'];
         const hostHeader = req.headers.host?.split(':')[0];
 
         if (!hostHeader || !allowedHosts.includes(hostHeader)) {

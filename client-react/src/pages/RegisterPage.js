@@ -14,7 +14,7 @@ function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post("http://10.88.231.44:8000/register", formData);
+      await axios.post("http://10.88.231.7:8000/register", formData);
       navigate("/login");
     } catch (err) {
       setError("Registration failed. Username may already exist.");

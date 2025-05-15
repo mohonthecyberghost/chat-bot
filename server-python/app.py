@@ -125,7 +125,8 @@ def chat():
     image_fs = request.files.get("image")
     pdf_fs = request.files.get("pdf")
 
-    history_type = "full"
+    # Use normal history type for summary responses
+    history_type = "normal"
 
     pdf_text = "No PDF content extracted."
     pdf_summary = "No PDF summary extracted."
@@ -141,12 +142,15 @@ def chat():
     u = User.objects(username=me).first()
     role = u.role if u else "user"
 
+    #history_full = ""
+    history_full = load_chat_history("full")
+
     ctx = f"""
 Project Documentation:
 {project_docs}
 
-PDF Contents:
-{pdf_text if history_type=="full" else pdf_summary}
+
+{"PDF Contents:"+pdf_summary if pdf_fs else ""}
 
 Conversation History:
 {formatted}
@@ -155,29 +159,41 @@ User Query:
 {text}
 """
 
-    # print("Context:", ctx.encode('ascii', 'ignore').decode('ascii'))
-
     if image_fs:
         img = image_from_file_storage(image_fs)
         resp = model.generate_content([ctx, img])
     else:
         resp = model.generate_content(ctx)
 
+   
+    
     if role == "manager":
-
-        # Save to chat history regardless of role
+        # Save summary to chat_messages (normal history)
         if text:
             history.append({"role": role, "parts": [text]})
-        if pdf_text:
-            if history_type=="full":
-                history.append({"role": role, "parts": [f"📄 Uploaded PDF Contents:\n{pdf_text}"]})
-            else:
-                history.append({"role": role, "parts": [f"📄 Uploaded PDF Summary:\n{pdf_summary}"]})
+            history.append({"role": "model", "parts": [resp.text]})
+
+            history_full.append({"role": role, "parts": [text]})
+            history_full.append({"role": "model", "parts": [resp.text]})
 
 
+            save_chat_history(history, "normal")
+            save_chat_history(history_full, "full")
 
-        history.append({"role": "model", "parts": [resp.text]})
-        save_chat_history(history,history_type)
+            
+        if pdf_fs:
+            
+
+            history.append({"role": role, "parts": [f"📄 Uploaded PDF Summary:\n{pdf_summary}"]})
+            save_chat_history(history, "normal")
+
+            history_full.append({"role": role, "parts": [f"📄 Uploaded PDF Contents:\n{pdf_text}"]})
+            save_chat_history(history_full, "full")
+
+  
+        
+
+        
 
     return jsonify(reply=resp.text, new_messages=history)
 
@@ -242,8 +258,61 @@ User Query:
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
+@app.route("/get_full_response", methods=["POST"])
+@jwt_required()
+def get_full_response():
+    try:
+        # Get the message index and user input from the request
+        data = request.get_json()
+        message_index = data.get("message_index", 0)
+        user_input = data.get("user_input", "")
+        
+        # Load full history
+        full_history = load_chat_history("full")
+        
+        # Print debug info
+        print(f"Requested message index: {message_index}, History length: {len(full_history)}")
+        
+        # Validate message index - use the last message if out of bounds
+        if not full_history:
+            return jsonify(error="No chat history found"), 404
+            
+        if message_index < 0 or message_index >= len(full_history):
+            print(f"Invalid index {message_index}, using most recent message instead")
+            # Use the most recent model message instead of returning an error
+            for i in range(len(full_history) - 1, -1, -1):
+                if full_history[i]["role"] == "model":
+                    message_index = i
+                    break
+            else:
+                return jsonify(error="No model messages found in history"), 404
+        
+        # Get the message content
+        message = full_history[message_index]
+        print(f"Using message at index {message_index}, role: {message['role']}")
+        
+        # Format the context with user's query
+        ctx = f"""
+User Query:
+{user_input}
 
+Project Documentation:
+{project_docs}
+
+Conversation History:
+{format_history(full_history)}
+"""
+        
+        # Generate full response with context
+        resp = model.generate_content(ctx)
+        
+        # Return the full response
+        return jsonify(full_reply=resp.text)
+            
+    except Exception as e:
+        print(f"Error in get_full_response: {str(e)}")
+        return jsonify(error=str(e)), 500
 # ——— Run App —————————————————————————————————————————————————————————————
 
 if __name__ == "__main__":
-    app.run(host="10.88.231.44",port=int(os.getenv("PORT", 8000)), debug=True)
+    app.run(host="10.88.231.7",port=int(os.getenv("PORT", 8000)), debug=True)

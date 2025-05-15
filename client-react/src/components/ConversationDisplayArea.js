@@ -2,9 +2,10 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import userIcon from '/user-icon.png';
 import chatbotIcon from '/chatbot-icon.png';
+import thinkingGif from '/chatbot-thinking.gif';
 import remarkGfm from 'remark-gfm';
 
-const ChatArea = ({ data, streamdiv, answer, loading }) => {
+const ChatArea = ({ data, streamdiv, answer, loading, expandedMessages, onReadMore, loadingFullResponses }) => {
     const getIconForRole = (role) => {
         switch (role) {
             case 'user':
@@ -28,7 +29,7 @@ const ChatArea = ({ data, streamdiv, answer, loading }) => {
                 </div>
             ) : null}
 
-            {data.map((element, index) => (
+            {data?.map((element, index) => (
                 <div key={index} className={element.role}>
                     <img
                         src={getIconForRole(element.role)}
@@ -41,12 +42,41 @@ const ChatArea = ({ data, streamdiv, answer, loading }) => {
                                 p: ({ node, ...props }) => <React.Fragment {...props} />
                             }}
                         >
-                            {
-                                typeof element.parts[0] === 'string'
-                                    ? element.parts[0]
-                                    : element.parts[0]?.text || ''
-                            }
+                            {typeof element.parts[0] === 'string'
+                                ? element.parts[0]
+                                : element.parts[0]?.text || ''}
                         </Markdown>
+
+                        {element.role === 'model' && !expandedMessages.has(index) && (
+                            <div className="read-more">
+                                <a href="#" onClick={(e) => {
+                                    e.preventDefault();
+                                    onReadMore(index);
+                                }}>
+                                    Read more...
+                                </a>
+                            </div>
+                        )}
+
+                        {element.role === 'model' && loadingFullResponses.has(index) && (
+                            <div className="loading-full-response">
+                                <div className="spinner"></div>
+                                <p>Loading full response...</p>
+                            </div>
+                        )}
+
+                        {element.role === 'model' && expandedMessages.has(index) && element.fullReply && (
+                            <>
+                                <hr className="message-divider" />
+                                <Markdown remarkPlugins={[remarkGfm]}
+                                    components={{
+                                        p: ({ node, ...props }) => <React.Fragment {...props} />
+                                    }}
+                                >
+                                    {element.fullReply}
+                                </Markdown>
+                            </>
+                        )}
 
                         {element.role === 'user' && element.imageUrl && (
                             <div className="uploaded-image">
@@ -84,14 +114,16 @@ const ChatArea = ({ data, streamdiv, answer, loading }) => {
             {loading && (
                 <div className="loading-indicator">
                     <img
-                        src="/chatbot-thinking.gif"
-                        alt="Loading"
-                        width={70}
+                        src={chatbotIcon}
+                        alt="AI icon"
                         className="chat-icon"
                     />
                     <div className="message-content">
-                        <div className="spinner"></div>
-                        <p style={{ marginLeft: '8px' }}>Thinking...</p>
+                        <img
+                            src={thinkingGif}
+                            alt="Loading"
+                            className="thinking-gif"
+                        />
                     </div>
                 </div>
             )}

@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../App';
+import Navigation from '../components/Navigation';
 
 function LoginPage() {
   const { setIsAuthenticated } = useContext(AuthContext);
@@ -18,7 +19,7 @@ function LoginPage() {
     }
 
     try {
-      const response = await fetch('http://10.88.231.44:8000/login', {
+      const response = await fetch('http://10.88.231.7:8000/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -43,6 +44,8 @@ function LoginPage() {
   };
 
   return (
+    <>
+      <Navigation />
       <div className="auth-form">
         <h2>Login</h2>
         <form onSubmit={handleLogin}>
@@ -65,6 +68,7 @@ function LoginPage() {
 
         <p>Don't have an account? <a href="/register">Register here</a></p>
       </div>
+    </>
   );
 }
 
