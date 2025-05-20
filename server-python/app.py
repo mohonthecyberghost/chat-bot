@@ -16,6 +16,7 @@ from PIL import Image
 import io
 from flask import request
 from PyPDF2 import PdfReader
+import fitz
 
 # ——— Configuration —————————————————————————————————————————————————————————
 load_dotenv()
@@ -44,6 +45,7 @@ project_docs = ""
 with open("docs/project_docs.txt", "r", encoding="utf-8") as f:
     project_docs = f.read()
 
+chat_session_history = []
 
 # ——— Helpers ———————————————————————————————————————————————————————————————
 
@@ -74,7 +76,17 @@ def image_from_file_storage(fs):
     img_bytes = fs.read()
     return Image.open(io.BytesIO(img_bytes))
 
-def extract_text_from_pdf(pdf_file):
+def extract_text_from_pdf(pdf_data):
+    text = ""
+    try:
+        doc = fitz.open(stream=pdf_data, filetype="pdf")
+        for page in doc:
+            text += page.get_text()
+        return text
+    except Exception as e:
+        return f"[Error reading PDF: {str(e)}]"
+    
+def extract_text_from_pdf_pdf2(pdf_file):
     try:
         # Read the PDF
         reader = PdfReader(pdf_file)
@@ -123,7 +135,10 @@ def login():
 def chat():
     text = request.form.get("user_input", "")
     image_fs = request.files.get("image")
-    pdf_fs = request.files.get("pdf")
+    pdf_file = request.files.get("pdf")
+
+
+    global chat_session_history
 
     # Use normal history type for summary responses
     history_type = "normal"
@@ -131,26 +146,41 @@ def chat():
     pdf_text = "No PDF content extracted."
     pdf_summary = "No PDF summary extracted."
 
-    if pdf_fs:
-        print("PDF received:", pdf_fs.filename)
-        pdf_text = extract_text_from_pdf(pdf_fs)
+    if pdf_file:
+        pdf_data = pdf_file.read()
+        print("PDF received:", pdf_file.filename)
+        pdf_text = extract_text_from_pdf(pdf_data)
         pdf_summary = summarize_pdf_content(pdf_text)
 
-    history = load_chat_history(history_type)
-    formatted = format_history(history)
+
+    
+
+    
     me = get_jwt_identity()
     u = User.objects(username=me).first()
     role = u.role if u else "user"
 
-    #history_full = ""
+    
+    history = load_chat_history(history_type)
     history_full = load_chat_history("full")
+
+    if role == "user":
+        history = history + chat_session_history;
+        history_full = history_full + chat_session_history;
+
+        print("chat_session_history History:", chat_session_history)
+
+    formatted = format_history(history)
+    #history_full = ""
+    
+
 
     ctx = f"""
 Project Documentation:
 {project_docs}
 
 
-{"PDF Contents:"+pdf_summary if pdf_fs else ""}
+{"PDF Summary Contents:"+pdf_summary if pdf_file else ""}
 
 Conversation History:
 {formatted}
@@ -171,17 +201,17 @@ User Query:
         # Save summary to chat_messages (normal history)
         if text:
             history.append({"role": role, "parts": [text]})
-            history.append({"role": "model", "parts": [resp.text]})
+            #history.append({"role": "model", "parts": [resp.text]})
 
             history_full.append({"role": role, "parts": [text]})
-            history_full.append({"role": "model", "parts": [resp.text]})
+            #history_full.append({"role": "model", "parts": [resp.text]})
 
 
             save_chat_history(history, "normal")
             save_chat_history(history_full, "full")
 
             
-        if pdf_fs:
+        if pdf_file:
             
 
             history.append({"role": role, "parts": [f"📄 Uploaded PDF Summary:\n{pdf_summary}"]})
@@ -191,7 +221,9 @@ User Query:
             save_chat_history(history_full, "full")
 
   
-        
+    elif role == "user":
+        chat_session_history.append({"role": "user", "parts": [text]})
+        chat_session_history.append({"role": "model", "parts": [resp.text]})
 
         
 
@@ -204,15 +236,20 @@ def stream():
     def generate():
         text = request.form.get("user_input", "")
         image_fs = request.files.get("image")
-        pdf_fs = request.files.get("pdf")
+        pdf_file = request.files.get("pdf")
         pdf_text = ""
         pdf_summary = ""
 
-        if pdf_fs:
-            print("PDF received in stream:", pdf_fs.filename)
-            pdf_text = extract_text_from_pdf(pdf_fs)
+        if pdf_file:
+            pdf_data = pdf_file.read()
+            print("PDF received:", pdf_file.filename)
+            pdf_text = extract_text_from_pdf(pdf_data)
+            pdf_summary = summarize_pdf_content(pdf_text)
+
+       
 
         history = load_chat_history()
+        history_full = load_chat_history("full")
         formatted = format_history(history)
         me = get_jwt_identity()
         u = User.objects(username=me).first()
@@ -222,8 +259,7 @@ def stream():
 Project Documentation:
 {project_docs}
 
-PDF Summary:
-{pdf_summary}
+{"PDF Summary Contents:"+pdf_summary if pdf_file else ""}
 
 Conversation History:
 {formatted}
@@ -247,15 +283,30 @@ User Query:
         except Exception as e:
             yield f"[Stream error: {str(e)}]"
 
+
         if role == "manager":
-            # Save chat history regardless of role
+            # Save summary to chat_messages (normal history)
             if text:
                 history.append({"role": role, "parts": [text]})
-            if pdf_text:
-                history.append({"role": role, "parts": [f"📄 Uploaded PDF:\n{pdf_summary}"]})
-            history.append({"role": "model", "parts": [full]})
-            save_chat_history(history)
+                #history.append({"role": "model", "parts": [resp.text]})
 
+                history_full.append({"role": role, "parts": [text]})
+                #history_full.append({"role": "model", "parts": [resp.text]})
+
+
+                save_chat_history(history, "normal")
+                save_chat_history(history_full, "full")
+
+                
+            if pdf_file:
+                
+                history.append({"role": role, "parts": [f"📄 Uploaded PDF Summary:\n{pdf_summary}"]})
+                save_chat_history(history, "normal")
+
+                history_full.append({"role": role, "parts": [f"📄 Uploaded PDF Contents:\n{pdf_text}"]})
+                save_chat_history(history_full, "full")
+
+       
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
 @app.route("/get_full_response", methods=["POST"])
@@ -269,6 +320,8 @@ def get_full_response():
         
         # Load full history
         full_history = load_chat_history("full")
+
+        recent_history = full_history[-2:]
         
         # Print debug info
         print(f"Requested message index: {message_index}, History length: {len(full_history)}")
@@ -300,7 +353,7 @@ Project Documentation:
 {project_docs}
 
 Conversation History:
-{format_history(full_history)}
+{format_history(recent_history)}
 """
         
         # Generate full response with context
