@@ -16,7 +16,7 @@ function ChatPage() {
   const [expandedMessages, setExpandedMessages] = useState(new Set());
   const [loadingFullResponses, setLoadingFullResponses] = useState(new Set());
 
-  const host = "http://10.88.231.7:8000";
+  const host = "http://127.0.0.1:8000";
   const url = host + "/chat";
   const streamUrl = host + "/stream";
 

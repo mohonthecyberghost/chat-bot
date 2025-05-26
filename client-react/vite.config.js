@@ -12,11 +12,11 @@ export default defineConfig({
   server: {
     host: true,
     port: 4000,
-    origin: 'http://askqa.konasl.net',
+    origin: 'http://https://chat-bot-v2wi.onrender.com',
 
     configureServer: (server) => {
       server.middlewares.use((req, res, next) => {
-        const allowedHosts = ['localhost', '10.88.231.7', 'askqa.konasl.net'];
+        const allowedHosts = ['localhost', '127.0.0.1', 'https://chat-bot-v2wi.onrender.com'];
         const hostHeader = req.headers.host?.split(':')[0];
 
         if (!hostHeader || !allowedHosts.includes(hostHeader)) {

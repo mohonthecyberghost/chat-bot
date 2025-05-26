@@ -368,4 +368,4 @@ Conversation History:
 # ——— Run App —————————————————————————————————————————————————————————————
 
 if __name__ == "__main__":
-    app.run(host="10.88.231.7",port=int(os.getenv("PORT", 8000)), debug=True)
+    app.run(host="127.0.0.1",port=int(os.getenv("PORT", 8000)), debug=True)

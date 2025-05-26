@@ -69,7 +69,7 @@ func main() {
 
 	// Access preferred port the server must listen to as an environment variable if provided.
 	port := cmp.Or(os.Getenv("PORT"), defaultPort)
-	addr := "10.88.231.7:" + port
+	addr := "127.0.0.1:" + port
 	log.Println("Listening on ", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
 }
