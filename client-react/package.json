@@ -31,9 +31,9 @@
     "dev": "vite --port 2000"
   },
   "engines": {
-  "node": "18.x",
+  "node": "20.x",
   "bun": "none"
-  },
+},
   "eslintConfig": {
     "extends": [
       "react-app",
