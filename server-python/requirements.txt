@@ -8,3 +8,4 @@ mongoengine
 Pillow
 PyPDF2
 pymupdf
+gunicorn
