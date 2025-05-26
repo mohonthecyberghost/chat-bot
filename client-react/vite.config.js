@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 4000,
+    port: 2000,
     origin: 'http://https://chat-bot-v2wi.onrender.com',
 
     configureServer: (server) => {
